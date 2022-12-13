@@ -2,6 +2,7 @@
 # All rights reserved.
 import os
 import json
+import torch
 
 from torchvision import datasets, transforms
 from torchvision.datasets.folder import ImageFolder, default_loader
@@ -64,8 +65,9 @@ def build_dataset(is_train, args):
 	elif args.data_set == 'OMIDB':
 		root = args.data_path
 		base_dataset = datasets.ImageFolder(root, transform=transform)
-		train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(42))
+		train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
 		dataset = train_dataset if is_train else test_dataset
+		print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
 		nb_classes = 5
 	elif args.data_set == 'IMNET':
 		if not args.use_mcloader:
@@ -91,24 +93,24 @@ def build_dataset(is_train, args):
 
 def build_transform(is_train, args):
 	resize_im = args.input_size > 32
-	if is_train:
-		# this should always dispatch to transforms_imagenet_train
-		transform = create_transform(
-			input_size=args.input_size,
-			is_training=True,
-			color_jitter=args.color_jitter,
-			auto_augment=args.aa,
-			interpolation=args.train_interpolation,
-			re_prob=args.reprob,
-			re_mode=args.remode,
-			re_count=args.recount,
-		)
-		if not resize_im:
-			# replace RandomResizedCropAndInterpolation with
-			# RandomCrop
-			transform.transforms[0] = transforms.RandomCrop(
-				args.input_size, padding=4)
-		return transform
+	#if is_train:
+#		# this should always dispatch to transforms_imagenet_train
+#		transform = create_transform(
+#			input_size=args.input_size,
+#			is_training=True,
+#			color_jitter=args.color_jitter,
+#			auto_augment=args.aa,
+#			interpolation=args.train_interpolation,
+#			re_prob=args.reprob,
+#			re_mode=args.remode,
+#			re_count=args.recount,
+#		)
+#		if not resize_im:
+#			# replace RandomResizedCropAndInterpolation with
+#			# RandomCrop
+#			transform.transforms[0] = transforms.RandomCrop(
+#				args.input_size, padding=4)
+#		return transform
 
 	t = []
 	if resize_im:
@@ -119,5 +121,7 @@ def build_transform(is_train, args):
 		t.append(transforms.CenterCrop(args.input_size))
 
 	t.append(transforms.ToTensor())
-	t.append(transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD))
+	#t.append(transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD))
+	t.append(transforms.Normalize(0.0,65535.0))
+	t.append(transforms.Grayscale(num_output_channels=3))
 	return transforms.Compose(t)
