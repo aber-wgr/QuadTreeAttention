@@ -14,14 +14,14 @@ from pathlib import Path
 
 from timm.data import Mixup
 from timm.models import create_model
-from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
+from timm.loss import SoftTargetCrossEntropy
 from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler, get_state_dict, ModelEma
 
 from datasets import build_dataset
 from engine import train_one_epoch, evaluate
-from losses import DistillationLoss
+from losses import DistillationLoss,LabelSmoothingCrossEntropy
 from samplers import RASampler
 # import models
 import pvt
@@ -42,9 +42,9 @@ def get_args_parser():
     parser.add_argument('--model', default='pvt_small', type=str, metavar='MODEL',
                         help='Name of model to train')
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
-
+    parser.add_argument('--channels', default=3, type=int, help='source channels')
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
-                        help='Dropout rate (default: 0.)')
+                         help='Dropout rate (default: 0.)')
     parser.add_argument('--drop-path', type=float, default=0.1, metavar='PCT',
                         help='Drop path rate (default: 0.1)')
 
@@ -143,10 +143,13 @@ def get_args_parser():
     # * Finetuning params
     parser.add_argument('--finetune', default='', help='finetune from checkpoint')
 
+    # Loss parameters (not the meme)
+    parser.add_argument('--loss-type', default='CrossEntropy', choices=['CrossEntropy', 'WeightedCrossEntropy'], type=str, help='loss class to use')
+
     # Dataset parameters
     parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
-    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19'],
+    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'OMIDB', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
     parser.add_argument('--use-mcloader', action='store_true', default=False, help='Use mcloader')
     parser.add_argument('--inat-category', default='name',
@@ -209,8 +212,8 @@ def main(args):
         else:
             sampler_train = torch.utils.data.DistributedSampler(
                 dataset_train,
-                # num_replicas=num_tasks,
-                num_replicas=0,
+                num_replicas=num_tasks,
+                #num_replicas=0,
                 rank=global_rank, shuffle=True
             )
         if args.dist_eval:
@@ -301,17 +304,38 @@ def main(args):
     optimizer = create_optimizer(args, model_without_ddp)
     loss_scaler = NativeScaler()
     lr_scheduler, _ = create_scheduler(args, optimizer)
+    
+    v = [k[1] for k in dataset_val]
+    val_targets = torch.as_tensor(v,dtype=torch.int)
+    val_weights = torch.bincount(val_targets)
+    val_weights = val_weights / len(dataset_val)
+    val_max = torch.max(val_weights) * 100.0
+    print("Test Baseline:" + str(val_max))
 
-    criterion = LabelSmoothingCrossEntropy()
+    if(args.loss_type == 'WeightedCrossEntropy'): 
+        t = [k[1] for k in dataset_train]
+        targets = torch.as_tensor(t,dtype=torch.int)
+        weights = torch.bincount(targets).to(device)
+        weights = len(dataset_train) / (args.nb_classes * weights)
+        print("Class Weighting:" + str(weights))
+        if args.smoothing > 0.:
+            criterion = LabelSmoothingCrossEntropy(weight=weights,smoothing=args.smoothing)
+        else:
+            criterion = torch.nn.CrossEntropyLoss(weight=weights)
+        
+    if(args.loss_type == 'CrossEntropy'):
+        weights = [1.0] * args.nb_classes
+        weights = torch.as_tensor(weights,dtype=torch.float).to(device)
+        if args.smoothing > 0.:
+            criterion = LabelSmoothingCrossEntropy(weight=weights,smoothing=args.smoothing)
+        else:
+            criterion = torch.nn.CrossEntropyLoss(weight=weights)
+        
 
-    if args.mixup > 0.:
+    #if args.mixup > 0.:
         # smoothing is handled with mixup label transform
-        criterion = SoftTargetCrossEntropy()
-    elif args.smoothing:
-        criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
-    else:
-        criterion = torch.nn.CrossEntropyLoss()
-
+    #   criterion = SoftTargetCrossEntropy()
+   
     # teacher_model = None
     # if args.distillation_type != 'none':
     #     assert args.teacher_path, 'need to specify teacher-path when using distillation'
