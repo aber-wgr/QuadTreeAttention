@@ -11,7 +11,7 @@ from torch.utils.data import random_split
 from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import create_transform
 from mcloader import ClassificationDataset
-
+from CustomDataSet import CustomDataSet
 
 class INatDataset(ImageFolder):
     def __init__(self, root, train=True, year=2018, transform=None, target_transform=None,
@@ -57,20 +57,25 @@ class INatDataset(ImageFolder):
 
 
 def build_dataset(is_train, args):
-    transform = build_transform(is_train, args)
 
     if args.data_set == 'CIFAR':
+        args.normalise_to = (IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD)
+        transform = build_transform(is_train, args)
         dataset = datasets.CIFAR100(args.data_path, train=is_train, transform=transform)
         nb_classes = 100
     elif args.data_set == 'OMIDB':
         root = args.data_path
-        base_dataset = datasets.ImageFolder(root, transform=transform)
+        args.normalise_to = (0.5,0.25)
+        transform = build_transform(is_train, args)
+        base_dataset = datasets.CustomDataSet(root, transform=transform) # custom loader to handle the 16-bit inputs
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
         dataset = train_dataset if is_train else test_dataset
         print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
         nb_classes = 5
     elif args.data_set == 'ISIC2018':
         root = args.data_path
+        args.normalise_to = (0.5,0.25)
+        transform = build_transform(is_train, args)
         base_dataset = datasets.ImageFolder(root, transform=transform)
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
         dataset = train_dataset if is_train else test_dataset
@@ -78,12 +83,16 @@ def build_dataset(is_train, args):
         nb_classes = 7
     elif args.data_set == 'ISIC2019':
         root = args.data_path
+        args.normalise_to = (0.5,0.25)
+        transform = build_transform(is_train, args)
         base_dataset = datasets.ImageFolder(root, transform=transform)
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
         dataset = train_dataset if is_train else test_dataset
         print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
         nb_classes = 8
     elif args.data_set == 'IMNET':
+        args.normalise_to = (IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD)
+        transform = build_transform(is_train, args)
         if not args.use_mcloader:
             root = os.path.join(args.data_path, 'train' if is_train else 'val')
             dataset = datasets.ImageFolder(root, transform=transform)
@@ -94,10 +103,14 @@ def build_dataset(is_train, args):
             )
         nb_classes = 1000
     elif args.data_set == 'INAT':
+        args.normalise_to = (IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD)
+        transform = build_transform(is_train, args)
         dataset = INatDataset(args.data_path, train=is_train, year=2018,
                               category=args.inat_category, transform=transform)
         nb_classes = dataset.nb_classes
     elif args.data_set == 'INAT19':
+        args.normalise_to = (IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD)
+        transform = build_transform(is_train, args)
         dataset = INatDataset(args.data_path, train=is_train, year=2019,
                               category=args.inat_category, transform=transform)
         nb_classes = dataset.nb_classes
@@ -132,10 +145,10 @@ def build_transform(is_train, args):
     #       transforms.Resize(size, interpolation=3),  # to maintain same ratio w.r.t. 224 images
     #   )
 
-    t.append(transforms.CenterCrop(args.input_size))
+    t.append(transforms.Resize(args.input_size,interpolation=InterpolationMode.NEAREST))
     t.append(transforms.ToTensor())
-    #t.append(transforms.Normalize(0.0,65535.0))
-    t.append(transforms.Normalize(0.3854, 0.4862))
+    t.append(transforms.Normalize(args.normalise_to[0], args.normalise_to[1]))
+    
     if(args.channels == 1):
         t.append(transforms.Grayscale(num_output_channels=3))
         

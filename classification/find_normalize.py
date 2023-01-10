@@ -22,9 +22,9 @@ loader = torch.utils.data.DataLoader(
     shuffle=False
 )
 
-psum    = torch.tensor([0.0])
-psum_sq = torch.tensor([0.0])
-count = 0
+psum    = torch.tensor([0.0,0.0,0.0])
+psum_sq = torch.tensor([0.0,0.0,0.0])
+count = torch.tensor([0,0,0])
 
 dataset_length = len(base_dataset)
 print("Dataset Length:" + str(dataset_length))
@@ -32,13 +32,13 @@ print("Dataset Length:" + str(dataset_length))
 print("Dataset shape:" + str(base_dataset[0][0].shape))
 
 for i,data in enumerate(loader):
-    image = data[0][0] # we only take the R-channel as these images are originally greyscale!
-    psum    += image.sum()
-    psum_sq += (image ** 2).sum()
-    count += np.prod(image.shape)
-    print("image " + str(i) + ": Min " + str(image.min()) + " Max " + str(image.max()) + " Local Mean " + str(image.mean())) 
+    for channel in range(3):
+        image = data[0][channel]
+        psum[channel]    += image.sum()
+        psum_sq[channel] += (image ** 2).sum()
+        count[channel] += np.prod(image.shape)
 
-print("total pixels:" + str(count))
+print("total pixels:" + str(count[0]))
 
 total_mean = psum / count
 total_var  = (psum_sq / count) - (total_mean ** 2)
