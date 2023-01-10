@@ -182,7 +182,12 @@ def get_args_parser():
 
 def main(args):
     utils.init_distributed_mode(args)
+    
     print(args)
+    
+    if (utils.is_main_process()):
+        wandb.init(project="QuadTreeAttention-wgr", entity="aber-wgr")
+    
     # if args.distillation_type != 'none' and args.finetune and not args.eval:
     #     raise NotImplementedError("Finetuning with distillation not yet supported")
 
@@ -203,7 +208,8 @@ def main(args):
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()
         
-        wandb.config = args
+        if (utils.is_main_process()):
+            wandb.config.update(args)
         
         if args.repeated_aug:
             sampler_train = RASampler(
@@ -297,7 +303,8 @@ def main(args):
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
     
-    wandb.watch(model)
+    if (utils.is_main_process()):
+        wandb.watch(model_without_ddp)
 
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
@@ -410,8 +417,6 @@ def main(args):
             fp32=args.fp32_resume
         )
         
-        wandb.loss(train_stats)
-
         lr_scheduler.step(epoch)
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
@@ -430,13 +435,14 @@ def main(args):
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print(f'Max accuracy: {max_accuracy:.2f}%')
-        
-        wandb.loss(test_stats)
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      **{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
+                     
+        if (utils.is_main_process()):
+            wandb.log(log_stats)
 
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
@@ -454,5 +460,4 @@ if __name__ == '__main__':
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
         
-    wandb.init(project="QuadTreeAttention-wgr", entity="aber-wgr")
     main(args)
