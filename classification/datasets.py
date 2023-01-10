@@ -69,6 +69,20 @@ def build_dataset(is_train, args):
         dataset = train_dataset if is_train else test_dataset
         print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
         nb_classes = 5
+    elif args.data_set == 'ISIC2018':
+        root = args.data_path
+        base_dataset = datasets.ImageFolder(root, transform=transform)
+        train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
+        dataset = train_dataset if is_train else test_dataset
+        print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
+        nb_classes = 7
+    elif args.data_set == 'ISIC2019':
+        root = args.data_path
+        base_dataset = datasets.ImageFolder(root, transform=transform)
+        train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
+        dataset = train_dataset if is_train else test_dataset
+        print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
+        nb_classes = 8
     elif args.data_set == 'IMNET':
         if not args.use_mcloader:
             root = os.path.join(args.data_path, 'train' if is_train else 'val')
