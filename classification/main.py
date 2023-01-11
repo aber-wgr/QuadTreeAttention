@@ -186,7 +186,7 @@ def main(args):
     print(args)
     
     if (utils.is_main_process()):
-        wandb.init(project="QuadTreeAttention-ISIC2018", entity="aber-wgr")
+        wandb.init(project="QuadTreeAttention-ISIC-v2", entity="aber-wgr")
     
     # if args.distillation_type != 'none' and args.finetune and not args.eval:
     #     raise NotImplementedError("Finetuning with distillation not yet supported")

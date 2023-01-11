@@ -74,7 +74,7 @@ def build_dataset(is_train, args):
         nb_classes = 5
     elif args.data_set == 'ISIC2018':
         root = args.data_path
-        args.normalise_to = (0.5,0.25)
+        args.normalise_to = ((0.6276, 0.6257, 0.6292),(0.1824, 0.1813, 0.1850))
         transform = build_transform(is_train, args)
         base_dataset = datasets.ImageFolder(root, transform=transform)
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
@@ -83,7 +83,7 @@ def build_dataset(is_train, args):
         nb_classes = 7
     elif args.data_set == 'ISIC2019':
         root = args.data_path
-        args.normalise_to = (0.5,0.25)
+        args.normalise_to = ((0.6276, 0.6257, 0.6292),(0.1824, 0.1813, 0.1850))
         transform = build_transform(is_train, args)
         base_dataset = datasets.ImageFolder(root, transform=transform)
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
@@ -145,7 +145,7 @@ def build_transform(is_train, args):
     #       transforms.Resize(size, interpolation=3),  # to maintain same ratio w.r.t. 224 images
     #   )
 
-    t.append(transforms.Resize(args.input_size,interpolation=InterpolationMode.NEAREST))
+    t.append(transforms.Resize((args.input_size,args.input_size),interpolation=3))
     t.append(transforms.ToTensor())
     t.append(transforms.Normalize(args.normalise_to[0], args.normalise_to[1]))
     

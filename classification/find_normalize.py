@@ -17,7 +17,7 @@ base_dataset = datasets.ImageFolder(root, transform=transform)
 
 loader = torch.utils.data.DataLoader(
     base_dataset,
-    batch_size=10,
+    batch_size=1,
     num_workers=1,
     shuffle=False
 )
