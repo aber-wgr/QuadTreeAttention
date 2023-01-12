@@ -67,7 +67,7 @@ def build_dataset(is_train, args):
         root = args.data_path
         args.normalise_to = (0.5,0.25)
         transform = build_transform(is_train, args)
-        base_dataset = datasets.CustomDataSet(root, transform=transform) # custom loader to handle the 16-bit inputs
+        base_dataset = CustomDataSet(root, transform=transform) # custom loader to handle the 16-bit inputs
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
         dataset = train_dataset if is_train else test_dataset
         print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
