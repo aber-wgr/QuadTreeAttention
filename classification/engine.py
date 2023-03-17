@@ -38,6 +38,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         # with torch.cuda.amp.autocast():
         #     outputs = model(samples)
         #     loss = criterion(samples, outputs, targets)
+
         with torch.cuda.amp.autocast(enabled=not fp32):
             outputs = model(samples)
             loss = criterion(samples, outputs, targets)
@@ -88,6 +89,17 @@ def evaluate(data_loader, model, device):
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
 
+        per_class_total = [None] * args.nb_classes
+    per_class_hit = [None] * args.nb_classes
+        for i in range(len(target)):
+            t = target[i]
+            v = output[i]
+            per_class_total[t] += 1
+            if t==v:
+                per_class_hit[t] += 1
+
+        per_class_accuracy = per_class_hit / per_class_total
+
         batch_size = images.shape[0]
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
@@ -96,5 +108,9 @@ def evaluate(data_loader, model, device):
     metric_logger.synchronize_between_processes()
     print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
           .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
+
+    print("Per-class Accuracy:")
+    for i,v in enumerate(per_class_accuracy):
+        print("Class " + str(i) + ": "+ str(v))
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
