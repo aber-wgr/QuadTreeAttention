@@ -172,6 +172,10 @@ def get_args_parser():
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem',
                         help='')
     parser.set_defaults(pin_mem=True)
+    
+    parser.add_argument('--no-wandb', action='store_true', help='Do not use Weights & Biases')
+    
+    parser.add_argument('--wandb-project', default='QuadTreeAttention_v2', help='Project name for Weights & Biases')
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -185,8 +189,8 @@ def main(args):
     
     print(args)
     
-    if (utils.is_main_process()):
-        wandb.init(project="QuadTreeAttention-ISIC-v2", entity="aber-wgr")
+    if (utils.is_main_process() and not args.no_wandb):
+        wandb.init(project=args.wandb_project, entity="aber-wgr")
     
     # if args.distillation_type != 'none' and args.finetune and not args.eval:
     #     raise NotImplementedError("Finetuning with distillation not yet supported")
@@ -208,7 +212,7 @@ def main(args):
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()
         
-        if (utils.is_main_process()):
+        if (utils.is_main_process()  and not args.no_wandb):
             wandb.config.update(args)
         
         if args.repeated_aug:
@@ -303,7 +307,7 @@ def main(args):
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
     
-    if (utils.is_main_process()):
+    if (utils.is_main_process()  and not args.no_wandb):
         wandb.watch(model_without_ddp)
 
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
@@ -337,7 +341,7 @@ def main(args):
             criterion = LabelSmoothingCrossEntropy(weight=weights,smoothing=args.smoothing)
         else:
             criterion = torch.nn.CrossEntropyLoss(weight=weights)
-        
+    base_criterion = criterion    
 
     #if args.mixup > 0.:
         # smoothing is handled with mixup label transform
@@ -431,7 +435,7 @@ def main(args):
                     'args': args,
                 }, checkpoint_path)
 
-        test_stats = evaluate(data_loader_val, model, device)
+        test_stats = evaluate(data_loader_val, model, device, base_criterion, args.nb_classes)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print(f'Max accuracy: {max_accuracy:.2f}%')
@@ -441,7 +445,7 @@ def main(args):
                      'epoch': epoch,
                      'n_parameters': n_parameters}
                      
-        if (utils.is_main_process()):
+        if (utils.is_main_process()  and not args.no_wandb):
             wandb.log(log_stats)
 
         if args.output_dir and utils.is_main_process():

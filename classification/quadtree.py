@@ -313,6 +313,7 @@ class PyramidVisionTransformerV2(nn.Module):
         return x.mean(dim=1)
 
     def forward(self, x):
+        # import pdb;pdb.set_trace()
         x = self.forward_features(x)
         x = self.head(x)
 

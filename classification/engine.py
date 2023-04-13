@@ -15,6 +15,8 @@ from timm.utils import accuracy, ModelEma
 from losses import DistillationLoss
 import utils
 
+import pdb
+
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -69,9 +71,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device):
-    criterion = torch.nn.CrossEntropyLoss()
-
+def evaluate(data_loader, model, device, criterion=torch.nn.CrossEntropyLoss(),nb_classes=1000):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
@@ -89,14 +89,17 @@ def evaluate(data_loader, model, device):
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
 
-        per_class_total = [None] * args.nb_classes
-    per_class_hit = [None] * args.nb_classes
+        per_class_total = [0] * nb_classes
+        per_class_hit = [0] * nb_classes
         for i in range(len(target)):
             t = target[i]
-            v = output[i]
+            _ , v = torch.max(output[i],dim=0)
             per_class_total[t] += 1
             if t==v:
                 per_class_hit[t] += 1
+                
+        per_class_total = torch.tensor(per_class_total)
+        per_class_hit = torch.tensor(per_class_hit)
 
         per_class_accuracy = per_class_hit / per_class_total
 
@@ -110,7 +113,7 @@ def evaluate(data_loader, model, device):
           .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
 
     print("Per-class Accuracy:")
-    for i,v in enumerate(per_class_accuracy):
+    for i,v in enumerate(per_class_accuracy.tolist()):
         print("Class " + str(i) + ": "+ str(v))
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
