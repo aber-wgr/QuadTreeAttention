@@ -26,7 +26,7 @@ void value_aggregation_cuda_forward(
 
 
     value_aggregation_forward_kernel(score.data<float>(), value.data<float>(),
-        index.data<long>(), output.data<float>(), B, N, K, H, M, D,
+        index.data<int64_t>(), output.data<float>(), B, N, K, H, M, D,
         at::cuda::getCurrentCUDAStream());
 }
 
@@ -55,7 +55,7 @@ void value_aggregation_cuda_backward(
 
 
     value_aggregation_backward_kernel(grad_output.data<float>(), score.data<float>(), 
-        value.data<float>(), index.data<long>(), grad_score.data<float>(), grad_value.data<float>(), 
+        value.data<float>(), index.data<int64_t>(), grad_score.data<float>(), grad_value.data<float>(), 
         B, N, K, H, M, D, at::cuda::getCurrentCUDAStream());
 }
 

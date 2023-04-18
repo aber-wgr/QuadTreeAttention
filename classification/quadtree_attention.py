@@ -31,8 +31,11 @@ class QuadtreeAttention(nn.Module):
         self.k_proj = nn.Conv2d(dim, dim, kernel_size=1, stride=1, bias=qkv_bias)
         self.v_proj = nn.Conv2d(dim, dim, kernel_size=1, stride=1, bias=qkv_bias)
 
+        #topks = [8,8,8,8]
+        gen_topks = [8] * sr_ratio
+
         if attn_type == "B":
-            self.py_att = QTAttB(num_heads, dim // num_heads, scale=sr_ratio, topks=[8, 8, 8, 8], lepe=True)
+            self.py_att = QTAttB(num_heads, dim // num_heads, scale=sr_ratio, topks=gen_topks, lepe=True)
             self.value_branchs = nn.ModuleList(
                 [
                     nn.Sequential(
