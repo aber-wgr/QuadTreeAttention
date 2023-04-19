@@ -70,7 +70,7 @@ def build_dataset(is_train, args):
         nb_classes = 100
     elif args.data_set == 'OMIDB':
         root = args.data_path
-        args.normalise_to = ((0.5,0.5,0.5),(0.25,0.25,0.25))
+        args.normalise_to = (0.5,0.25)
         transform = build_transform(is_train, args)
         base_dataset = ImageFolder(root, transform=transform, loader=png16_loader) # custom loader to handle the 16-bit inputs
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
@@ -152,7 +152,7 @@ def build_transform(is_train, args):
 
     t.append(transforms.Resize((args.input_size,args.input_size),interpolation=3))
     if(args.channels == 1):
-        t.append(transforms.Grayscale(num_output_channels=3))
+        t.append(transforms.Grayscale(num_output_channels=1))
     
     t.append(transforms.ToTensor())
     t.append(transforms.Normalize(args.normalise_to[0], args.normalise_to[1]))

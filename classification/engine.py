@@ -97,11 +97,6 @@ def evaluate(data_loader, model, device, criterion=torch.nn.CrossEntropyLoss(),n
             per_class_total[t] += 1
             if t==v:
                 per_class_hit[t] += 1
-                
-        per_class_total = torch.tensor(per_class_total)
-        per_class_hit = torch.tensor(per_class_hit)
-
-        per_class_accuracy = per_class_hit / per_class_total
 
         batch_size = images.shape[0]
         metric_logger.update(loss=loss.item())
@@ -112,8 +107,16 @@ def evaluate(data_loader, model, device, criterion=torch.nn.CrossEntropyLoss(),n
     print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
           .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
 
+    per_class_total = torch.tensor(per_class_total)
+    per_class_hit = torch.tensor(per_class_hit)
+
+    per_class_accuracy = per_class_hit / per_class_total
+    mean_accuracy = torch.mean(per_class_accuracy)
+
     print("Per-class Accuracy:")
     for i,v in enumerate(per_class_accuracy.tolist()):
         print("Class " + str(i) + ": "+ str(v))
+        
+    print("Mean Accuracy:" + str(mean_accuracy))
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}

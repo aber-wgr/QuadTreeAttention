@@ -274,6 +274,7 @@ def main(args):
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,
         drop_block_rate=None,
+        in_chans=args.channels
     )
 
 
