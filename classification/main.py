@@ -7,6 +7,7 @@ import time
 import torch
 import torch.backends.cudnn as cudnn
 import json
+import os
 
 import wandb
 
@@ -23,13 +24,14 @@ from datasets import build_dataset
 from engine import train_one_epoch, evaluate
 from losses import DistillationLoss,LabelSmoothingCrossEntropy
 from samplers import RASampler
+
 # import models
 import pvt
 import pvt_v2
 import quadtree
 import utils
 import collections
-
+from distributedproxysampler import DistributedProxySampler
 
 def get_args_parser():
     parser = argparse.ArgumentParser('PVT training and evaluation script', add_help=False)
@@ -205,8 +207,25 @@ def main(args):
 
     cudnn.benchmark = True
 
-    dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
-    dataset_val, _ = build_dataset(is_train=False, args=args)
+    dataset_train, args.nb_classes, train_counts = build_dataset(is_train=True, args=args)
+    dataset_val, _, val_counts = build_dataset(is_train=False, args=args)
+    
+    # t = [k[1] for k in dataset_train]
+    tcounts = torch.as_tensor(train_counts,dtype=torch.int).to(device)
+    
+    unbalanced = len(torch.unique(tcounts)) != 1
+    
+    weights = len(dataset_train) / (args.nb_classes * tcounts)
+    print("Class Weighting:" + str(weights))
+
+    if unbalanced:
+        t = [k[1] for k in dataset_train]
+        sample_weight = [weights[n] for n in t]
+        base_sampler_train = torch.utils.data.WeightedRandomSampler(sample_weight,len(dataset_train),replacement=True)
+    else:
+        base_sampler_train = torch.utils.data.RandomSampler(dataset_train)
+    
+    base_sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
     if True:  # args.distributed:
         num_tasks = utils.get_world_size()
@@ -216,31 +235,29 @@ def main(args):
             wandb.config.update(args)
         
         if args.repeated_aug:
-            sampler_train = RASampler(
+            base_sampler_train = RASampler(
                 dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
             )
         else:
-            sampler_train = torch.utils.data.DistributedSampler(
-                dataset_train,
+            base_sampler_train = DistributedProxySampler(
+                base_sampler_train,
                 num_replicas=num_tasks,
-                #num_replicas=0,
-                rank=global_rank, shuffle=True
+                rank=global_rank
             )
         if args.dist_eval:
             if len(dataset_val) % num_tasks != 0:
                 print('Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. '
                       'This will slightly alter validation results as extra duplicate entries are added to achieve '
                       'equal num of samples per-process.')
-            sampler_val = torch.utils.data.DistributedSampler(
+            base_sampler_val = DistributedSampler(
                 dataset_val,
-                # num_replicas=num_tasks,
                 num_replicas=0,
-                rank=global_rank, shuffle=False)
+                rank=global_rank)
         else:
-            sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-    else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+            base_sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+    
+    sampler_train = base_sampler_train
+    sampler_val = base_sampler_val
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
@@ -302,11 +319,23 @@ def main(args):
     model_ema = None
   
     model_without_ddp = model
+    
+    # calculate model size
+    param_size = 0
+    buffer_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+    size_mb = (param_size + buffer_size) / 1024**2
+    
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         model_without_ddp = model.module
+    
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
+    print('model size(MB):' + str(size_mb))
     
     if (utils.is_main_process()  and not args.no_wandb):
         wandb.watch(model_without_ddp)
@@ -317,31 +346,20 @@ def main(args):
     loss_scaler = NativeScaler()
     lr_scheduler, _ = create_scheduler(args, optimizer)
     
-    v = [k[1] for k in dataset_val]
-    val_targets = torch.as_tensor(v,dtype=torch.int)
-    val_weights = torch.bincount(val_targets)
-    val_weights = val_weights / len(dataset_val)
+    
+    vcounts = torch.as_tensor(val_counts,dtype=torch.int).to(device)
+    
+    val_weights = vcounts / len(dataset_val)
+    print(str(val_weights))
     val_max = torch.max(val_weights) * 100.0
     print("Test Baseline:" + str(val_max))
 
-    if(args.loss_type == 'WeightedCrossEntropy'): 
-        t = [k[1] for k in dataset_train]
-        targets = torch.as_tensor(t,dtype=torch.int)
-        weights = torch.bincount(targets).to(device)
-        weights = len(dataset_train) / (args.nb_classes * weights)
-        print("Class Weighting:" + str(weights))
-        if args.smoothing > 0.:
-            criterion = LabelSmoothingCrossEntropy(weight=weights,smoothing=args.smoothing)
-        else:
-            criterion = torch.nn.CrossEntropyLoss(weight=weights)
+     
+    if args.smoothing > 0.:
+        criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
+    else:
+        criterion = torch.nn.CrossEntropyLoss()
         
-    if(args.loss_type == 'CrossEntropy'):
-        weights = [1.0] * args.nb_classes
-        weights = torch.as_tensor(weights,dtype=torch.float).to(device)
-        if args.smoothing > 0.:
-            criterion = LabelSmoothingCrossEntropy(weight=weights,smoothing=args.smoothing)
-        else:
-            criterion = torch.nn.CrossEntropyLoss(weight=weights)
     base_criterion = criterion    
 
     #if args.mixup > 0.:

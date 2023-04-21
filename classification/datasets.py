@@ -68,15 +68,28 @@ def build_dataset(is_train, args):
         transform = build_transform(is_train, args)
         dataset = datasets.CIFAR100(args.data_path, train=is_train, transform=transform)
         nb_classes = 100
+        if is_train:
+            counts = [500] * nb_classes
+        else:
+            counts = [100] * nb_classes
+        
     elif args.data_set == 'OMIDB':
         root = args.data_path
-        args.normalise_to = (0.5,0.25)
+        args.normalise_to = (0.3827,0.4858)
         transform = build_transform(is_train, args)
         base_dataset = ImageFolder(root, transform=transform, loader=png16_loader) # custom loader to handle the 16-bit inputs
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
         dataset = train_dataset if is_train else test_dataset
-        print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
+        #print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
         nb_classes = 5
+        counts = [0] * nb_classes
+        rootfolders = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
+
+        for i, ff in enumerate(rootfolders):
+            source_dir = os.path.join(root,ff)
+            filepaths = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir,f))]
+            counts[i] = len(filepaths)
+        
     elif args.data_set == 'ISIC2018':
         root = args.data_path
         args.normalise_to = ((0.6276, 0.6257, 0.6292),(0.1824, 0.1813, 0.1850))
@@ -84,8 +97,16 @@ def build_dataset(is_train, args):
         base_dataset = datasets.ImageFolder(root, transform=transform)
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
         dataset = train_dataset if is_train else test_dataset
-        print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
+        #print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
         nb_classes = 7
+        counts = [0] * nb_classes
+        rootfolders = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
+
+        for i, ff in enumerate(rootfolders):
+            source_dir = os.path.join(root,ff)
+            filepaths = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir,f))]
+            counts[i] = len(filepaths)
+        
     elif args.data_set == 'ISIC2019':
         root = args.data_path
         args.normalise_to = ((0.6276, 0.6257, 0.6292),(0.1824, 0.1813, 0.1850))
@@ -93,8 +114,16 @@ def build_dataset(is_train, args):
         base_dataset = datasets.ImageFolder(root, transform=transform)
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
         dataset = train_dataset if is_train else test_dataset
-        print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
+        #print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
         nb_classes = 8
+        counts = [0] * nb_classes
+        rootfolders = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
+
+        for i, ff in enumerate(rootfolders):
+            source_dir = os.path.join(root,ff)
+            filepaths = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir,f))]
+            counts[i] = len(filepaths)
+        
     elif args.data_set == 'IMNET':
         args.normalise_to = (IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD)
         transform = build_transform(is_train, args)
@@ -107,12 +136,22 @@ def build_dataset(is_train, args):
                 pipeline=transform
             )
         nb_classes = 1000
+        counts = [0] * nb_classes
+        rootfolders = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
+
+        for i, ff in enumerate(rootfolders):
+            source_dir = os.path.join(root,ff)
+            filepaths = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir,f))]
+            counts[i] = len(filepaths)
+
+        
     elif args.data_set == 'INAT':
         args.normalise_to = (IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD)
         transform = build_transform(is_train, args)
         dataset = INatDataset(args.data_path, train=is_train, year=2018,
                               category=args.inat_category, transform=transform)
         nb_classes = dataset.nb_classes
+        
     elif args.data_set == 'INAT19':
         args.normalise_to = (IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD)
         transform = build_transform(is_train, args)
@@ -120,43 +159,61 @@ def build_dataset(is_train, args):
                               category=args.inat_category, transform=transform)
         nb_classes = dataset.nb_classes
 
-    return dataset, nb_classes
+    return dataset, nb_classes, counts
 
 
 def build_transform(is_train, args):
     resize_im = args.input_size > 32
-    #if is_train:
+    if is_train:
         # this should always dispatch to transforms_imagenet_train
-        #transform = create_transform(
-        #    input_size=args.input_size,
-        #    is_training=True,
-        #    color_jitter=args.color_jitter,
-        #    auto_augment=args.aa,
-        #    interpolation=args.train_interpolation,
-        #    re_prob=args.reprob,
-        #    re_mode=args.remode,
-        #    re_count=args.recount,
-        #)
+        transform = create_transform(
+            input_size=args.input_size,
+            scale=(0.8,1.0),
+            is_training=True,
+            color_jitter=args.color_jitter,
+            auto_augment=args.aa,
+            interpolation=args.train_interpolation,
+            mean=args.normalise_to[0],
+            std=args.normalise_to[1],
+            re_prob=args.reprob,
+            re_mode=args.remode,
+            re_count=args.recount,
+        )
         
         #if(args.channels == 1):
         #    transform.transforms.append(transforms.Grayscale(num_output_channels=3))
         #print("transform:"+str(transform))
         #return transform
 
-    t = []
-    #if resize_im:
-    #   size = int((256 / 224) * args.input_size)
-    #   t.append(
-    #       transforms.Resize(size, interpolation=3),  # to maintain same ratio w.r.t. 224 images
-    #   )
+        #t = []
+        #if resize_im:
+        #   size = int((256 / 224) * args.input_size)
+        #   t.append(
+        #       transforms.Resize(size, interpolation=3),  # to maintain same ratio w.r.t. 224 images
+        #   )
 
-    t.append(transforms.Resize((args.input_size,args.input_size),interpolation=3))
-    if(args.channels == 1):
-        t.append(transforms.Grayscale(num_output_channels=1))
+        #t.append(transforms.Resize((args.input_size,args.input_size),interpolation=3))
+        if(args.channels == 1):
+            transform.transforms.append(transforms.Grayscale(num_output_channels=1))
+        #transform.transforms.append(transforms.ToTensor())
+
     
+        #t.append(transforms.ToTensor())
+        #t.append(transforms.Normalize(args.normalise_to[0], args.normalise_to[1]))
+       
+        #transform = transforms.Compose(t)
+        print("transform:"+str(transform))
+        return transform
+        
+    t = []
+    if resize_im:
+        t.append(
+            transforms.Resize(args.input_size, interpolation=3),  # to maintain same ratio w.r.t. 224 images
+        )
+        t.append(transforms.CenterCrop(args.input_size))
+
     t.append(transforms.ToTensor())
     t.append(transforms.Normalize(args.normalise_to[0], args.normalise_to[1]))
-       
-    transform = transforms.Compose(t)
-    print("transform:"+str(transform))
-    return transform
+    if(args.channels == 1):
+        t.append(transforms.Grayscale(num_output_channels=1))
+    return transforms.Compose(t)
