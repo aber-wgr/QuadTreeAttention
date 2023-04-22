@@ -78,6 +78,9 @@ def evaluate(data_loader, model, device, criterion=torch.nn.CrossEntropyLoss(),n
     # switch to evaluation mode
     model.eval()
 
+    per_class_total = [0] * nb_classes
+    per_class_hit = [0] * nb_classes
+
     for images, target in metric_logger.log_every(data_loader, 10, header):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
@@ -89,8 +92,6 @@ def evaluate(data_loader, model, device, criterion=torch.nn.CrossEntropyLoss(),n
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
 
-        per_class_total = [0] * nb_classes
-        per_class_hit = [0] * nb_classes
         for i in range(len(target)):
             t = target[i]
             _ , v = torch.max(output[i],dim=0)

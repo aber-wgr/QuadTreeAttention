@@ -221,7 +221,11 @@ def main(args):
     if unbalanced:
         t = [k[1] for k in dataset_train]
         sample_weight = [weights[n] for n in t]
-        base_sampler_train = torch.utils.data.WeightedRandomSampler(sample_weight,len(dataset_train),replacement=True)
+        
+        m = max(train_counts)
+        maximal = m * (len(tcounts))
+        print("Generating " + str(maximal) + " samples for unbalanced dataset")
+        base_sampler_train = torch.utils.data.WeightedRandomSampler(sample_weight,maximal,replacement=True)
     else:
         base_sampler_train = torch.utils.data.RandomSampler(dataset_train)
     
