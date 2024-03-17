@@ -214,6 +214,11 @@ def save_on_master(*args, **kwargs):
 
 
 def init_distributed_mode(args):
+    if 'WORLD_SIZE' in os.environ:
+        args.world_size = int(os.environ['WORLD_SIZE'])
+    args.distributed = args.world_size > 1
+    ngpus_per_node = torch.cuda.device_count()
+
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         args.rank = int(os.environ["RANK"])
         args.world_size = int(os.environ['WORLD_SIZE'])
