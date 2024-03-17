@@ -13,6 +13,7 @@ from timm.data import create_transform
 from mcloader import ClassificationDataset
 from CustomDataSet import CustomDataSet
 from PIL import Image
+from collections import Counter
 
 class INatDataset(ImageFolder):
     def __init__(self, root, train=True, year=2018, transform=None, target_transform=None,
@@ -75,21 +76,36 @@ def build_dataset(is_train, args):
         
     elif args.data_set == 'OMIDB':
         root = args.data_path
-        args.normalise_to = (0.3827,0.4858)
+        #args.normalise_to = (0.3827,0.4858)
+        args.normalise_to = ((0.3851,0.3851,0.3851),(0.4862,0.4862,0.4862))
+
         transform = build_transform(is_train, args)
         base_dataset = ImageFolder(root, transform=transform, loader=png16_loader) # custom loader to handle the 16-bit inputs
         train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
         dataset = train_dataset if is_train else test_dataset
         #print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
         nb_classes = 5
+        count_dict = Counter(base_dataset.targets[idx] for idx in dataset.indices)
         counts = [0] * nb_classes
-        rootfolders = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
+        for k,v in count_dict.items():
+            counts[k] = v
 
-        for i, ff in enumerate(rootfolders):
-            source_dir = os.path.join(root,ff)
-            filepaths = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir,f))]
-            counts[i] = len(filepaths)
-        
+    elif args.data_set == 'OMIDB_SCREEN':
+        root = args.data_path
+        #args.normalise_to = (0.3827,0.4858)
+        args.normalise_to = ((0.3851,0.3851,0.3851),(0.4862,0.4862,0.4862))
+
+        transform = build_transform(is_train, args)
+        base_dataset = ImageFolder(root, transform=transform, loader=png16_loader) # custom loader to handle the 16-bit inputs
+        train_dataset,test_dataset = random_split(base_dataset, [0.8,0.2], generator=torch.Generator().manual_seed(args.seed))
+        dataset = train_dataset if is_train else test_dataset
+        #print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
+        nb_classes = 7
+        count_dict = Counter(base_dataset.targets[idx] for idx in dataset.indices)
+        counts = [0] * nb_classes
+        for k,v in count_dict.items():
+            counts[k] = v
+    
     elif args.data_set == 'ISIC2018':
         root = args.data_path
         args.normalise_to = ((0.6276, 0.6257, 0.6292),(0.1824, 0.1813, 0.1850))
@@ -99,30 +115,24 @@ def build_dataset(is_train, args):
         dataset = train_dataset if is_train else test_dataset
         #print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
         nb_classes = 7
+        count_dict = Counter(base_dataset.targets[idx] for idx in dataset.indices)
         counts = [0] * nb_classes
-        rootfolders = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
-
-        for i, ff in enumerate(rootfolders):
-            source_dir = os.path.join(root,ff)
-            filepaths = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir,f))]
-            counts[i] = len(filepaths)
+        for k,v in count_dict.items():
+            counts[k] = v
         
     elif args.data_set == 'ISIC2019':
         root = args.data_path
         args.normalise_to = ((0.6276, 0.6257, 0.6292),(0.1824, 0.1813, 0.1850))
         transform = build_transform(is_train, args)
         base_dataset = datasets.ImageFolder(root, transform=transform)
-        train_dataset,test_dataset = random_split(base_dataset, [0.9,0.1], generator=torch.Generator().manual_seed(args.seed))
+        train_dataset,test_dataset = random_split(base_dataset, [0.8,0.2], generator=torch.Generator().manual_seed(args.seed))
         dataset = train_dataset if is_train else test_dataset
         #print( ("train:" if is_train else "test:") + str(len(dataset)) + " shape:" + str(dataset[0][0].shape) )
         nb_classes = 8
+        count_dict = Counter(base_dataset.targets[idx] for idx in dataset.indices)
         counts = [0] * nb_classes
-        rootfolders = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
-
-        for i, ff in enumerate(rootfolders):
-            source_dir = os.path.join(root,ff)
-            filepaths = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir,f))]
-            counts[i] = len(filepaths)
+        for k,v in count_dict.items():
+            counts[k] = v
         
     elif args.data_set == 'IMNET':
         args.normalise_to = (IMAGENET_DEFAULT_MEAN,IMAGENET_DEFAULT_STD)
@@ -136,13 +146,10 @@ def build_dataset(is_train, args):
                 pipeline=transform
             )
         nb_classes = 1000
+        count_dict = Counter(base_dataset.targets[idx] for idx in dataset.indices)
         counts = [0] * nb_classes
-        rootfolders = [f for f in os.listdir(root) if os.path.isdir(os.path.join(root, f))]
-
-        for i, ff in enumerate(rootfolders):
-            source_dir = os.path.join(root,ff)
-            filepaths = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir,f))]
-            counts[i] = len(filepaths)
+        for k,v in count_dict.items():
+            counts[k] = v
 
         
     elif args.data_set == 'INAT':
@@ -171,6 +178,7 @@ def build_transform(is_train, args):
             scale=(0.8,1.0),
             is_training=True,
             color_jitter=args.color_jitter,
+            no_aug = False,
             auto_augment=args.aa,
             interpolation=args.train_interpolation,
             mean=args.normalise_to[0],
@@ -194,7 +202,8 @@ def build_transform(is_train, args):
 
         #t.append(transforms.Resize((args.input_size,args.input_size),interpolation=3))
         if(args.channels == 1):
-            transform.transforms.append(transforms.Grayscale(num_output_channels=1))
+            transform.transforms.insert(0,transforms.Grayscale(num_output_channels=3)) # convert to 3-channel for xform stack
+            transform.transforms.append(transforms.Grayscale(num_output_channels=1)) # convert back to 1-channel
         #transform.transforms.append(transforms.ToTensor())
 
     
@@ -206,6 +215,9 @@ def build_transform(is_train, args):
         return transform
         
     t = []
+    if(args.channels == 1):
+        t.append(transforms.Grayscale(num_output_channels=3))
+
     if resize_im:
         t.append(
             transforms.Resize(args.input_size, interpolation=3),  # to maintain same ratio w.r.t. 224 images

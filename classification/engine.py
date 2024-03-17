@@ -112,12 +112,15 @@ def evaluate(data_loader, model, device, criterion=torch.nn.CrossEntropyLoss(),n
     per_class_hit = torch.tensor(per_class_hit)
 
     per_class_accuracy = per_class_hit / per_class_total
-    mean_accuracy = torch.mean(per_class_accuracy)
+    mean_accuracy = torch.mean(per_class_accuracy).item()
 
     print("Per-class Accuracy:")
     for i,v in enumerate(per_class_accuracy.tolist()):
         print("Class " + str(i) + ": "+ str(v))
         
-    print("Mean Accuracy:" + str(mean_accuracy))
+    print("Mean Per-Class Accuracy:" + str(mean_accuracy))
 
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    output_dict = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    output_dict['mean_per_class_acc'] = mean_accuracy
+
+    return output_dict

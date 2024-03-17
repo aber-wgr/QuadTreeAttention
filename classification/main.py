@@ -47,7 +47,7 @@ def get_args_parser():
     parser.add_argument('--channels', default=3, type=int, help='source channels')
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
                          help='Dropout rate (default: 0.)')
-    parser.add_argument('--drop-path', type=float, default=0.1, metavar='PCT',
+    parser.add_argument('--drop_path', type=float, default=0.1, metavar='PCT',
                         help='Drop path rate (default: 0.1)')
 
     # parser.add_argument('--model-ema', action='store_true')
@@ -69,6 +69,7 @@ def get_args_parser():
                         help='SGD momentum (default: 0.9)')
     parser.add_argument('--weight-decay', type=float, default=0.05,
                         help='weight decay (default: 0.05)')
+
     # Learning rate schedule parameters
     parser.add_argument('--sched', default='cosine', type=str, metavar='SCHEDULER',
                         help='LR scheduler (default: "cosine"')
@@ -151,7 +152,7 @@ def get_args_parser():
     # Dataset parameters
     parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
-    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'OMIDB', 'ISIC2018', 'ISIC2019', 'IMNET', 'INAT', 'INAT19'],
+    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'OMIDB', 'OMIDB_SCREEN', 'ISIC2018', 'ISIC2019', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
     parser.add_argument('--use-mcloader', action='store_true', default=False, help='Use mcloader')
     parser.add_argument('--inat-category', default='name',
@@ -206,26 +207,32 @@ def main(args):
     # random.seed(seed)
 
     cudnn.benchmark = True
-
+    
+    print("building datasets...")
+    
     dataset_train, args.nb_classes, train_counts = build_dataset(is_train=True, args=args)
     dataset_val, _, val_counts = build_dataset(is_train=False, args=args)
     
-    # t = [k[1] for k in dataset_train]
     tcounts = torch.as_tensor(train_counts,dtype=torch.int).to(device)
     
     unbalanced = len(torch.unique(tcounts)) != 1
+    #unbalanced = False
     
     weights = len(dataset_train) / (args.nb_classes * tcounts)
     print("Class Weighting:" + str(weights))
 
     if unbalanced:
-        t = [k[1] for k in dataset_train]
+        # get classes for each sample in Subset
+        print("Rebalancing dataset...")
+        base_dataset = dataset_train.dataset
+        t = [base_dataset.targets[idx] for idx in dataset_train.indices]
         sample_weight = [weights[n] for n in t]
-        
+        # the goal here is an even number of all classes. We pick the largest class set and oversample all the others into parity.
         m = max(train_counts)
         maximal = m * (len(tcounts))
         print("Generating " + str(maximal) + " samples for unbalanced dataset")
         base_sampler_train = torch.utils.data.WeightedRandomSampler(sample_weight,maximal,replacement=True)
+        unbalanced = False
     else:
         base_sampler_train = torch.utils.data.RandomSampler(dataset_train)
     
@@ -278,6 +285,8 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=False
     )
+
+    print("Data Loader setup completed.")
 
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
@@ -358,11 +367,15 @@ def main(args):
     val_max = torch.max(val_weights) * 100.0
     print("Test Baseline:" + str(val_max))
 
-     
+     # weights no longer passed in as we artificially balance the dataset
     if args.smoothing > 0.:
         criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
     else:
-        criterion = torch.nn.CrossEntropyLoss()
+        if unbalanced:
+            criterion = torch.nn.CrossEntropyLoss(weight=weights)
+        else:
+            criterion = torch.nn.CrossEntropyLoss()
+
         
     base_criterion = criterion    
 
