@@ -3,6 +3,7 @@
 #include <math.h>
 #include <float.h>
 #include <vector>
+#include "THC/THCAtomics.cuh"
 #include "score_computation.h"
 #include <stdio.h>
 
@@ -133,8 +134,8 @@ __global__ void ScoreDataBackward(
           int idx=index[b][n1][k][h];
           for(int d=0;d<D;d++){
               
-              atomicAdd(&query_grad[b][n1][f][h][d], grad_data[k*H+h]*key[b][idx][h][d]);
-              atomicAdd(&key_grad[b][idx][h][d],grad_data[k*H+h]*query_data[h*D+d]);
+              gpuAtomicAdd(&query_grad[b][n1][f][h][d], grad_data[k*H+h]*key[b][idx][h][d]);
+              gpuAtomicAdd(&key_grad[b][idx][h][d],grad_data[k*H+h]*query_data[h*D+d]);
           }
           
       }
