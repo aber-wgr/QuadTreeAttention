@@ -15,6 +15,8 @@ from timm.utils import accuracy, ModelEma
 from losses import DistillationLoss
 import utils
 
+import pdb
+
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -38,6 +40,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         # with torch.cuda.amp.autocast():
         #     outputs = model(samples)
         #     loss = criterion(samples, outputs, targets)
+
         with torch.cuda.amp.autocast(enabled=not fp32):
             outputs = model(samples)
             loss = criterion(samples, outputs, targets)
@@ -68,14 +71,15 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device):
-    criterion = torch.nn.CrossEntropyLoss()
-
+def evaluate(data_loader, model, device, criterion=torch.nn.CrossEntropyLoss(),nb_classes=1000):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
     # switch to evaluation mode
     model.eval()
+
+    per_class_total = [0] * nb_classes
+    per_class_hit = [0] * nb_classes
 
     for images, target in metric_logger.log_every(data_loader, 10, header):
         images = images.to(device, non_blocking=True)
@@ -88,6 +92,13 @@ def evaluate(data_loader, model, device):
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
 
+        for i in range(len(target)):
+            t = target[i]
+            _ , v = torch.max(output[i],dim=0)
+            per_class_total[t] += 1
+            if t==v:
+                per_class_hit[t] += 1
+
         batch_size = images.shape[0]
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
@@ -97,4 +108,19 @@ def evaluate(data_loader, model, device):
     print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
           .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
 
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    per_class_total = torch.tensor(per_class_total)
+    per_class_hit = torch.tensor(per_class_hit)
+
+    per_class_accuracy = per_class_hit / per_class_total
+    mean_accuracy = torch.mean(per_class_accuracy).item()
+
+    print("Per-class Accuracy:")
+    for i,v in enumerate(per_class_accuracy.tolist()):
+        print("Class " + str(i) + ": "+ str(v))
+        
+    print("Mean Per-Class Accuracy:" + str(mean_accuracy))
+
+    output_dict = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    output_dict['mean_per_class_acc'] = mean_accuracy
+
+    return output_dict

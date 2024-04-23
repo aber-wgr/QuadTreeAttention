@@ -7,27 +7,31 @@ import time
 import torch
 import torch.backends.cudnn as cudnn
 import json
+import os
+
+import wandb
 
 from pathlib import Path
 
 from timm.data import Mixup
 from timm.models import create_model
-from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
+from timm.loss import SoftTargetCrossEntropy
 from timm.scheduler import create_scheduler
 from timm.optim import create_optimizer
 from timm.utils import NativeScaler, get_state_dict, ModelEma
 
 from datasets import build_dataset
 from engine import train_one_epoch, evaluate
-from losses import DistillationLoss
+from losses import DistillationLoss,LabelSmoothingCrossEntropy
 from samplers import RASampler
+
 # import models
 import pvt
 import pvt_v2
 import quadtree
 import utils
 import collections
-
+from distributedproxysampler import DistributedProxySampler
 
 def get_args_parser():
     parser = argparse.ArgumentParser('PVT training and evaluation script', add_help=False)
@@ -40,10 +44,10 @@ def get_args_parser():
     parser.add_argument('--model', default='pvt_small', type=str, metavar='MODEL',
                         help='Name of model to train')
     parser.add_argument('--input-size', default=224, type=int, help='images input size')
-
+    parser.add_argument('--channels', default=3, type=int, help='source channels')
     parser.add_argument('--drop', type=float, default=0.0, metavar='PCT',
-                        help='Dropout rate (default: 0.)')
-    parser.add_argument('--drop-path', type=float, default=0.1, metavar='PCT',
+                         help='Dropout rate (default: 0.)')
+    parser.add_argument('--drop_path', type=float, default=0.1, metavar='PCT',
                         help='Drop path rate (default: 0.1)')
 
     # parser.add_argument('--model-ema', action='store_true')
@@ -65,6 +69,7 @@ def get_args_parser():
                         help='SGD momentum (default: 0.9)')
     parser.add_argument('--weight-decay', type=float, default=0.05,
                         help='weight decay (default: 0.05)')
+
     # Learning rate schedule parameters
     parser.add_argument('--sched', default='cosine', type=str, metavar='SCHEDULER',
                         help='LR scheduler (default: "cosine"')
@@ -141,10 +146,13 @@ def get_args_parser():
     # * Finetuning params
     parser.add_argument('--finetune', default='', help='finetune from checkpoint')
 
+    # Loss parameters (not the meme)
+    parser.add_argument('--loss-type', default='CrossEntropy', choices=['CrossEntropy', 'WeightedCrossEntropy'], type=str, help='loss class to use')
+
     # Dataset parameters
     parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
-    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19'],
+    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'OMIDB', 'OMIDB_SCREEN', 'ISIC2018', 'ISIC2019', 'IMNET', 'INAT', 'INAT19'],
                         type=str, help='Image Net dataset path')
     parser.add_argument('--use-mcloader', action='store_true', default=False, help='Use mcloader')
     parser.add_argument('--inat-category', default='name',
@@ -167,6 +175,10 @@ def get_args_parser():
     parser.add_argument('--no-pin-mem', action='store_false', dest='pin_mem',
                         help='')
     parser.set_defaults(pin_mem=True)
+    
+    parser.add_argument('--no-wandb', action='store_true', help='Do not use Weights & Biases')
+    
+    parser.add_argument('--wandb-project', default='QuadTreeAttention_v2', help='Project name for Weights & Biases')
 
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
@@ -177,7 +189,12 @@ def get_args_parser():
 
 def main(args):
     utils.init_distributed_mode(args)
+    
     print(args)
+    
+    if (utils.is_main_process() and not args.no_wandb):
+        wandb.init(project=args.wandb_project, entity="aber-wgr")
+    
     # if args.distillation_type != 'none' and args.finetune and not args.eval:
     #     raise NotImplementedError("Finetuning with distillation not yet supported")
 
@@ -190,39 +207,68 @@ def main(args):
     # random.seed(seed)
 
     cudnn.benchmark = True
+    
+    print("building datasets...")
+    
+    dataset_train, args.nb_classes, train_counts = build_dataset(is_train=True, args=args)
+    dataset_val, _, val_counts = build_dataset(is_train=False, args=args)
+    
+    tcounts = torch.as_tensor(train_counts,dtype=torch.int).to(device)
+    
+    unbalanced = len(torch.unique(tcounts)) != 1
+    #unbalanced = False
+    
+    weights = len(dataset_train) / (args.nb_classes * tcounts)
+    print("Class Weighting:" + str(weights))
 
-    dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
-    dataset_val, _ = build_dataset(is_train=False, args=args)
+    if unbalanced:
+        # get classes for each sample in Subset
+        print("Rebalancing dataset...")
+        base_dataset = dataset_train.dataset
+        t = [base_dataset.targets[idx] for idx in dataset_train.indices]
+        sample_weight = [weights[n] for n in t]
+        # the goal here is an even number of all classes. We pick the largest class set and oversample all the others into parity.
+        m = max(train_counts)
+        maximal = m * (len(tcounts))
+        print("Generating " + str(maximal) + " samples for unbalanced dataset")
+        base_sampler_train = torch.utils.data.WeightedRandomSampler(sample_weight,maximal,replacement=True)
+        unbalanced = False
+    else:
+        base_sampler_train = torch.utils.data.RandomSampler(dataset_train)
+    
+    base_sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
     if True:  # args.distributed:
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()
+        
+        if (utils.is_main_process()  and not args.no_wandb):
+            wandb.config.update(args)
+        
         if args.repeated_aug:
-            sampler_train = RASampler(
+            base_sampler_train = RASampler(
                 dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
             )
         else:
-            sampler_train = torch.utils.data.DistributedSampler(
-                dataset_train,
-                # num_replicas=num_tasks,
-                num_replicas=0,
-                rank=global_rank, shuffle=True
+            base_sampler_train = DistributedProxySampler(
+                base_sampler_train,
+                num_replicas=num_tasks,
+                rank=global_rank
             )
         if args.dist_eval:
             if len(dataset_val) % num_tasks != 0:
                 print('Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. '
                       'This will slightly alter validation results as extra duplicate entries are added to achieve '
                       'equal num of samples per-process.')
-            sampler_val = torch.utils.data.DistributedSampler(
+            base_sampler_val = DistributedSampler(
                 dataset_val,
-                # num_replicas=num_tasks,
                 num_replicas=0,
-                rank=global_rank, shuffle=False)
+                rank=global_rank)
         else:
-            sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-    else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+            base_sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+    
+    sampler_train = base_sampler_train
+    sampler_val = base_sampler_val
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
@@ -240,6 +286,8 @@ def main(args):
         drop_last=False
     )
 
+    print("Data Loader setup completed.")
+
     mixup_fn = None
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
     if mixup_active:
@@ -256,6 +304,7 @@ def main(args):
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,
         drop_block_rate=None,
+        in_chans=args.channels
     )
 
 
@@ -283,28 +332,57 @@ def main(args):
     model_ema = None
   
     model_without_ddp = model
+    
+    # calculate model size
+    param_size = 0
+    buffer_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+    size_mb = (param_size + buffer_size) / 1024**2
+    
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         model_without_ddp = model.module
+    
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
+    print('model size(MB):' + str(size_mb))
+    
+    if (utils.is_main_process()  and not args.no_wandb):
+        wandb.watch(model_without_ddp)
 
     linear_scaled_lr = args.lr * args.batch_size * utils.get_world_size() / 512.0
     args.lr = linear_scaled_lr
     optimizer = create_optimizer(args, model_without_ddp)
     loss_scaler = NativeScaler()
     lr_scheduler, _ = create_scheduler(args, optimizer)
+    
+    
+    vcounts = torch.as_tensor(val_counts,dtype=torch.int).to(device)
+    
+    val_weights = vcounts / len(dataset_val)
+    print(str(val_weights))
+    val_max = torch.max(val_weights) * 100.0
+    print("Test Baseline:" + str(val_max))
 
-    criterion = LabelSmoothingCrossEntropy()
-
-    if args.mixup > 0.:
-        # smoothing is handled with mixup label transform
-        criterion = SoftTargetCrossEntropy()
-    elif args.smoothing:
+     # weights no longer passed in as we artificially balance the dataset
+    if args.smoothing > 0.:
         criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
     else:
-        criterion = torch.nn.CrossEntropyLoss()
+        if unbalanced:
+            criterion = torch.nn.CrossEntropyLoss(weight=weights)
+        else:
+            criterion = torch.nn.CrossEntropyLoss()
 
+        
+    base_criterion = criterion    
+
+    #if args.mixup > 0.:
+        # smoothing is handled with mixup label transform
+    #   criterion = SoftTargetCrossEntropy()
+   
     # teacher_model = None
     # if args.distillation_type != 'none':
     #     assert args.teacher_path, 'need to specify teacher-path when using distillation'
@@ -378,7 +456,7 @@ def main(args):
             set_training_mode=args.finetune == '',  # keep in eval mode during finetuning
             fp32=args.fp32_resume
         )
-
+        
         lr_scheduler.step(epoch)
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
@@ -393,7 +471,7 @@ def main(args):
                     'args': args,
                 }, checkpoint_path)
 
-        test_stats = evaluate(data_loader_val, model, device)
+        test_stats = evaluate(data_loader_val, model, device, base_criterion, args.nb_classes)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         max_accuracy = max(max_accuracy, test_stats["acc1"])
         print(f'Max accuracy: {max_accuracy:.2f}%')
@@ -402,6 +480,9 @@ def main(args):
                      **{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
+                     
+        if (utils.is_main_process()  and not args.no_wandb):
+            wandb.log(log_stats)
 
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
@@ -418,4 +499,5 @@ if __name__ == '__main__':
     args = utils.update_from_config(args)
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+        
     main(args)

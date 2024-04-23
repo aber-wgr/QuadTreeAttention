@@ -4,7 +4,30 @@
 Implements the knowledge distillation loss
 """
 import torch
+import torch.nn as nn
 from torch.nn import functional as F
+from torch.autograd import Variable
+        
+class LabelSmoothingCrossEntropy(nn.Module):
+    def __init__(self, 
+        smoothing:float=0.1, # The weight for the interpolation formula
+        weight:torch.Tensor=None, # Manual rescaling weight given to each class passed to `F.nll_loss`
+        reduction:str='mean' # PyTorch reduction to apply to the output
+    ): 
+        super(LabelSmoothingCrossEntropy, self).__init__()
+        self.eps = smoothing
+        self.weight = weight
+        self.reduction = reduction
+
+    def forward(self, output:torch.Tensor, target:torch.Tensor) -> torch.Tensor:
+        "Apply `F.log_softmax` on output then blend the loss/num_classes(`c`) with the `F.nll_loss`"
+        c = output.size()[1]
+        log_preds = F.log_softmax(output, dim=1)
+        if self.reduction=='sum': loss = -log_preds.sum()
+        else:
+            loss = -log_preds.sum(dim=1) #We divide by that size at the return line so sum and not mean
+            if self.reduction=='mean':  loss = loss.mean()
+        return loss*self.eps/c + (1-self.eps) * F.nll_loss(log_preds, target.long(), weight=self.weight, reduction=self.reduction)
 
 
 class DistillationLoss(torch.nn.Module):

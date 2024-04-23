@@ -233,7 +233,7 @@ class PyramidVisionTransformerV2(nn.Module):
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dims=[64, 128, 256, 512],
                  num_heads=[1, 2, 4, 8], mlp_ratios=[4, 4, 4, 4], qkv_bias=False, qk_scale=None, drop_rate=0.,
                  attn_drop_rate=0., drop_path_rate=0., norm_layer=nn.LayerNorm,
-                 depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1], num_stages=4, linear=False, attn_type='B'):
+                 depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1], num_stages=4, linear=False, attn_type='B',pretrained=False,pretrained_cfg=None):
         super().__init__()
         self.num_classes = num_classes
         self.depths = depths
@@ -313,6 +313,7 @@ class PyramidVisionTransformerV2(nn.Module):
         return x.mean(dim=1)
 
     def forward(self, x):
+        # import pdb;pdb.set_trace()
         x = self.forward_features(x)
         x = self.head(x)
 
@@ -343,6 +344,8 @@ def _conv_filter(state_dict, patch_size=16):
 
     return out_dict
 
+
+''' MODELS FOR 224x224 IMAGES '''
 
 @register_model
 def quadtree_b0(pretrained=False, **kwargs):
@@ -379,7 +382,7 @@ def quadtree_b1(pretrained=False, **kwargs):
 @register_model
 def quadtree_b2(pretrained=False, **kwargs):
     model = PyramidVisionTransformerV2(
-        patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[8, 8, 4, 4], qkv_bias=True,
+        patch_size=4, embed_dims=[64, 128, 320, 512, 640], num_heads=[1, 2, 5, 8], mlp_ratios=[8, 8, 4, 4], qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 6, 3], sr_ratios=[4, 3, 2, 1], **kwargs)
     model.default_cfg = _cfg()
 
@@ -408,3 +411,90 @@ def quadtree_b4(pretrained=False, **kwargs):
     return model
 
 
+''' MODELS FOR 448x448 IMAGES '''
+
+@register_model
+def quadtree_t1(pretrained=False, **kwargs):
+    model = PyramidVisionTransformerV2(
+        patch_size=4, embed_dims=[64, 128, 320, 512, 640], num_heads=[1, 2, 5, 8, 10], mlp_ratios=[8, 8, 4, 4, 4], qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-4), depths=[2, 2, 2, 2, 2], sr_ratios=[5, 4, 3, 2, 1],
+        **kwargs)
+    model.default_cfg = _cfg()
+
+    return model
+
+@register_model
+def quadtree_t2(pretrained=False, **kwargs):
+    model = PyramidVisionTransformerV2(
+        patch_size=4, embed_dims=[64, 128, 320, 512, 640], num_heads=[1, 2, 5, 8, 10], mlp_ratios=[8, 8, 4, 4, 4], qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-4), depths=[3, 4, 6, 6, 3], sr_ratios=[5, 4, 3, 2, 1], **kwargs)
+    model.default_cfg = _cfg()
+
+    return model
+
+
+@register_model
+def quadtree_t3(pretrained=False, **kwargs):
+    model = PyramidVisionTransformerV2(
+        patch_size=4, embed_dims=[64, 128, 320, 512, 640], num_heads=[1, 2, 5, 8, 10], mlp_ratios=[8, 8, 4, 4, 4], qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-4), depths=[3, 4, 18, 9, 3], sr_ratios=[5, 4, 3, 2, 1],
+        **kwargs)
+    model.default_cfg = _cfg()
+
+    return model
+
+
+@register_model
+def quadtree_t4(pretrained=False, **kwargs):
+    model = PyramidVisionTransformerV2(
+        patch_size=4, embed_dims=[64, 128, 320, 512, 640], num_heads=[1, 2, 5, 8, 10], mlp_ratios=[8, 8, 4, 4, 4], qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-4), depths=[3, 8, 27, 18, 3], sr_ratios=[5, 4, 3, 2, 1],
+        **kwargs)
+    model.default_cfg = _cfg()
+
+    return model
+
+''' MODELS FOR 1792x1792 IMAGES '''
+
+
+@register_model
+def quadtree_o1(pretrained=False, **kwargs):
+    model = PyramidVisionTransformerV2(
+        patch_size=4, embed_dims=[64, 128, 192, 256, 320, 384, 448], num_heads=[1, 2, 3, 4, 5, 6, 7], mlp_ratios=[8, 8, 8, 4, 4, 4, 4], qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[2, 2, 2, 2, 2, 2, 2], sr_ratios=[7, 6, 5, 4, 3, 2, 1],
+        **kwargs)
+    model.default_cfg = _cfg()
+
+    return model
+
+
+@register_model
+def quadtree_o2(pretrained=False, **kwargs):
+    model = PyramidVisionTransformerV2(
+        patch_size=4, embed_dims=[64, 128, 192, 256, 320, 384, 448], num_heads=[1, 2, 3, 4, 5, 6, 7], mlp_ratios=[8, 8, 8, 4, 4, 4, 4], qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 4, 6, 6, 6, 3], sr_ratios=[7, 6, 5, 4, 3, 2, 1], **kwargs)
+    model.default_cfg = _cfg()
+
+    return model
+
+
+@register_model
+def quadtree_o3(pretrained=False, **kwargs):
+    model = PyramidVisionTransformerV2(
+        patch_size=4, embed_dims=[64, 128, 192, 256, 320, 384, 448], num_heads=[1, 2, 3, 4, 5, 6, 7], mlp_ratios=[8, 8, 8, 4, 4, 4, 4], qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 7, 9, 18, 9, 3], sr_ratios=[7, 6, 5, 4, 3, 2, 1],
+        **kwargs)
+    model.default_cfg = _cfg()
+
+    return model
+
+
+@register_model
+def quadtree_o4(pretrained=False, **kwargs):
+    model = PyramidVisionTransformerV2(
+        patch_size=4, embed_dims=[64, 128, 192, 256, 320, 384, 448], num_heads=[1, 2, 3, 4, 5, 6, 7], mlp_ratios=[8, 8, 8, 4, 4, 4, 4], qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 6, 8, 27, 18, 9, 3], sr_ratios=[7, 6, 5, 4, 3, 2, 1],
+        **kwargs)
+    model.default_cfg = _cfg()
+
+    return model

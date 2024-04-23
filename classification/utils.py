@@ -13,7 +13,7 @@ import datetime
 
 import torch
 import torch.distributed as dist
-import mmcv
+import mmengine
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
@@ -214,6 +214,11 @@ def save_on_master(*args, **kwargs):
 
 
 def init_distributed_mode(args):
+    if 'WORLD_SIZE' in os.environ:
+        args.world_size = int(os.environ['WORLD_SIZE'])
+    args.distributed = args.world_size > 1
+    ngpus_per_node = torch.cuda.device_count()
+
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         args.rank = int(os.environ["RANK"])
         args.world_size = int(os.environ['WORLD_SIZE'])
@@ -239,7 +244,7 @@ def init_distributed_mode(args):
 
 
 def update_from_config(args):
-    cfg = mmcv.Config.fromfile(args.config)
+    cfg = mmengine.Config.fromfile(args.config)
     for _, cfg_item in cfg._cfg_dict.items():
         for k, v in cfg_item.items():
             setattr(args, k, v)
