@@ -461,7 +461,7 @@ def quadtree_t4(pretrained=False, **kwargs):
 @register_model
 def quadtree_f1(pretrained=False, **kwargs):
     model = PyramidVisionTransformerV2(
-        patch_size=4, embed_dims=[64, 128, 192, 256, 320, 512], num_heads=[1, 2, 3, 5, 8, 10], mlp_ratios=[8, 8, 8, 4, 4, 4], qkv_bias=True,
+        patch_size=4, embed_dims=[64, 128, 192, 320, 512, 640], num_heads=[1, 2, 3, 5, 8, 10], mlp_ratios=[8, 8, 8, 4, 4, 4], qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[2, 2, 2, 2, 2, 2], sr_ratios=[6, 5, 4, 3, 2, 1],
         **kwargs)
     model.default_cfg = _cfg()
@@ -472,7 +472,7 @@ def quadtree_f1(pretrained=False, **kwargs):
 @register_model
 def quadtree_f2(pretrained=False, **kwargs):
     model = PyramidVisionTransformerV2(
-        patch_size=4, embed_dims=[64, 128, 192, 256, 320, 512], num_heads=[1, 2, 3, 5, 8, 10], mlp_ratios=[8, 8, 8, 4, 4, 4], qkv_bias=True,
+        patch_size=4, embed_dims=[64, 128, 192, 320, 512, 640], num_heads=[1, 2, 3, 5, 8, 10], mlp_ratios=[8, 8, 8, 4, 4, 4], qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 4, 6, 6, 3], sr_ratios=[6, 5, 4, 3, 2, 1], **kwargs)
     model.default_cfg = _cfg()
 
@@ -482,7 +482,7 @@ def quadtree_f2(pretrained=False, **kwargs):
 @register_model
 def quadtree_f3(pretrained=False, **kwargs):
     model = PyramidVisionTransformerV2(
-        patch_size=4, embed_dims=[64, 128, 192, 256, 320, 512], num_heads=[1, 2, 3, 5, 8, 10], mlp_ratios=[8, 8, 8, 4, 4, 4], qkv_bias=True,
+        patch_size=4, embed_dims=[64, 128, 192, 320, 512, 640], num_heads=[1, 2, 3, 5, 8, 10], mlp_ratios=[8, 8, 8, 4, 4, 4], qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 9, 18, 9, 3], sr_ratios=[6, 5, 4, 3, 2, 1],
         **kwargs)
     model.default_cfg = _cfg()
@@ -493,7 +493,7 @@ def quadtree_f3(pretrained=False, **kwargs):
 @register_model
 def quadtree_f4(pretrained=False, **kwargs):
     model = PyramidVisionTransformerV2(
-        patch_size=4, embed_dims=[64, 128, 192, 256, 320, 512], num_heads=[11, 2, 3, 5, 8, 10], mlp_ratios=[8, 8, 8, 4, 4, 4], qkv_bias=True,
+        patch_size=4, embed_dims=[64, 128, 192, 320, 512, 640], num_heads=[1, 2, 3, 5, 8, 10], mlp_ratios=[8, 8, 8, 4, 4, 4], qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 6, 27, 18, 9, 3], sr_ratios=[6, 5, 4, 3, 2, 1],
         **kwargs)
     model.default_cfg = _cfg()
