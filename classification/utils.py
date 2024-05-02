@@ -219,9 +219,10 @@ def init_distributed_mode(args):
     args.distributed = args.world_size > 1
     ngpus_per_node = torch.cuda.device_count()
 
-    if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
-        args.rank = int(os.environ["RANK"])
+    if 'WORlD_SIZE' in os.environ:
         args.world_size = int(os.environ['WORLD_SIZE'])
+    if 'RANK' in os.environ and 'LOCAL_RANK' in os.environ:
+        args.rank = int(os.environ["RANK"])
         args.gpu = int(os.environ['LOCAL_RANK'])
     elif 'SLURM_PROCID' in os.environ:
         args.rank = int(os.environ['SLURM_PROCID'])
