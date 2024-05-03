@@ -193,6 +193,7 @@ def main(args):
     print(args)
     
     if (utils.is_main_process() and not args.no_wandb):
+        wandb.login(key='3bacef1a06de22a30bace38f63f00ee56cabc863')
         wandb.init(project=args.wandb_project, entity="aber-wgr")
     
     # if args.distillation_type != 'none' and args.finetune and not args.eval:
