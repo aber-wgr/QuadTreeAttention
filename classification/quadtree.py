@@ -483,7 +483,7 @@ def quadtree_f2(pretrained=False, **kwargs):
 def quadtree_f3(pretrained=False, **kwargs):
     model = PyramidVisionTransformerV2(
         patch_size=4, embed_dims=[64, 128, 192, 320, 512, 640], num_heads=[1, 2, 3, 5, 8, 10], mlp_ratios=[8, 8, 8, 4, 4, 4], qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 9, 18, 9, 3], sr_ratios=[6, 5, 4, 3, 2, 1],
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 6, 12, 18, 9, 3], sr_ratios=[6, 5, 4, 3, 2, 1],
         **kwargs)
     model.default_cfg = _cfg()
 
