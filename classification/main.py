@@ -372,7 +372,8 @@ def main(args):
         criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
     else:
         if unbalanced:
-            criterion = torch.nn.CrossEntropyLoss(weight=weights)
+            #criterion = torch.nn.CrossEntropyLoss(weight=weights)
+            criterion = torch.nn.CrossEntropyLoss()
         else:
             criterion = torch.nn.CrossEntropyLoss()
 
