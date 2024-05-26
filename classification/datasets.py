@@ -15,6 +15,10 @@ from CustomDataSet import CustomDataSet
 from PIL import Image
 from collections import Counter
 
+# Fix for truncated images
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 class INatDataset(ImageFolder):
     def __init__(self, root, train=True, year=2018, transform=None, target_transform=None,
                  category='name', loader=default_loader):
